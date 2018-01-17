@@ -1,6 +1,7 @@
 #ifndef UNIBN_OCTREE_H_
 #define UNIBN_OCTREE_H_
 
+
 // Copyright (c) 2015 Jens Behley, University of Bonn
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,15 +28,6 @@
 #include <cstring>  // memset.
 #include <limits>
 #include <vector>
-
-// needed for gtest access to protected/private members ...
-namespace
-{
-class OctreeTest;
-}
-
-namespace unibn
-{
 
 /**
  * Some traits to access coordinates regardless of the specific implementation of point
@@ -226,6 +218,39 @@ struct OctreeParams
  * \author behley
  */
 
+class Octant
+{
+public:
+    Octant();
+    ~Octant();
+
+    bool isLeaf;
+
+    // bounding box of the octant needed for overlap and contains tests...
+    float x, y, z;  // center
+    float extent;   // half of side-length
+
+    uint32_t start, end;  // start and end in succ_
+    uint32_t size;        // number of points
+
+    Octant* child[8];
+};
+
+inline Octant::Octant()
+        : isLeaf(true), x(0.0f), y(0.0f), z(0.0f), extent(0.0f), start(0), end(0), size(0)
+{
+  memset(&child, 0, 8 * sizeof(Octant*));
+}
+
+inline Octant::~Octant()
+{
+  for (uint32_t i = 0; i < 8; ++i) delete child[i];
+}
+
+
+
+
+
 template <typename PointT, typename ContainerT = std::vector<PointT> >
 class Octree
 {
@@ -253,30 +278,18 @@ class Octree
   void radiusNeighbors(const PointT& query, float radius, std::vector<uint32_t>& resultIndices,
                        std::vector<float>& distances) const;
 
+
+
   /** \brief nearest neighbor queries. Using minDistance >= 0, we explicitly disallow self-matches.
    * @return index of nearest neighbor n with Distance::compute(query, n) > minDistance and otherwise -1.
    **/
   template <typename Distance>
   int32_t findNeighbor(const PointT& query, float minDistance = -1) const;
 
- protected:
-  class Octant
-  {
-   public:
-    Octant();
-    ~Octant();
 
-    bool isLeaf;
+  Octant* getRoot();
 
-    // bounding box of the octant needed for overlap and contains tests...
-    float x, y, z;  // center
-    float extent;   // half of side-length
-
-    uint32_t start, end;  // start and end in succ_
-    uint32_t size;        // number of points
-
-    Octant* child[8];
-  };
+  protected:
 
   // not copyable, not assignable ...
   Octree(Octree&);
@@ -350,21 +363,9 @@ class Octree
 
   std::vector<uint32_t> successors_;  // single connected list of next point indices...
 
-  friend class ::OctreeTest;
 };
 
-template <typename PointT, typename ContainerT>
-Octree<PointT, ContainerT>::Octant::Octant()
-    : isLeaf(true), x(0.0f), y(0.0f), z(0.0f), extent(0.0f), start(0), end(0), size(0)
-{
-  memset(&child, 0, 8 * sizeof(Octant*));
-}
 
-template <typename PointT, typename ContainerT>
-Octree<PointT, ContainerT>::Octant::~Octant()
-{
-  for (uint32_t i = 0; i < 8; ++i) delete child[i];
-}
 
 template <typename PointT, typename ContainerT>
 Octree<PointT, ContainerT>::Octree()
@@ -501,7 +502,12 @@ void Octree<PointT, ContainerT>::clear()
 }
 
 template <typename PointT, typename ContainerT>
-typename Octree<PointT, ContainerT>::Octant* Octree<PointT, ContainerT>::createOctant(float x, float y, float z,
+Octant* Octree<PointT, ContainerT>::getRoot(){
+  return root_;
+}
+
+template <typename PointT, typename ContainerT>
+Octant* Octree<PointT, ContainerT>::createOctant(float x, float y, float z,
                                                                                       float extent, uint32_t startIdx,
                                                                                       uint32_t endIdx, uint32_t size)
 {
@@ -844,6 +850,6 @@ bool Octree<PointT, ContainerT>::inside(const PointT& query, float radius, const
 
   return true;
 }
-}
+
 
 #endif /* OCTREE_HPP_ */
