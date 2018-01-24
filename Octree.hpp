@@ -28,12 +28,19 @@
 #include <cstring>  // memset.
 #include <limits>
 #include <vector>
+#include <iostream>
 
 /**
  * Some traits to access coordinates regardless of the specific implementation of point
  * inspired by boost.geometry, which needs to be implemented by new points.
  *
  */
+
+inline float dot(const float n1[3], const float n2[3] ){
+  return n1[0]*n2[0] + n1[1]*n2[1] + n1[2]*n2[2];
+}
+
+
 namespace traits
 {
 
@@ -180,11 +187,12 @@ struct MaxDistance
 struct OctreeParams
 {
  public:
-  OctreeParams(uint32_t bucketSize = 32, bool copyPoints = false, float minExtent = 0.0f)
-      : bucketSize(bucketSize), copyPoints(copyPoints), minExtent(minExtent)
+  OctreeParams(uint32_t bucketSize = 32, bool copyPoints = false, float minExtent = 0.0f, float maxNormalDeviation=0.05)
+      : bucketSize(bucketSize), copyPoints(copyPoints), minExtent(minExtent), maxNormalDeviation(maxNormalDeviation)
   {
   }
   uint32_t bucketSize;
+    float maxNormalDeviation;
   bool copyPoints;
   float minExtent;
 };
@@ -229,6 +237,7 @@ public:
     // bounding box of the octant needed for overlap and contains tests...
     float x, y, z;  // center
     float extent;   // half of side-length
+    float normal[3];
 
     uint32_t start, end;  // start and end in succ_
     uint32_t size;        // number of points
@@ -527,8 +536,30 @@ Octant* Octree<PointT, ContainerT>::createOctant(float x, float y, float z,
 
   static const float factor[] = {-0.5f, 0.5f};
 
+  //initialize the normal of the octant to the first point
+  //go through all the points that are inside here
+    //if any one of them deviated more than max normal_deviation we break and split
+  const ContainerT& points = *data_;
+  octant->normal[0]=points[startIdx].normal[0];
+  octant->normal[1]=points[startIdx].normal[1];
+  octant->normal[2]=points[startIdx].normal[2];
+
+  bool haveToSplit=false;
+  uint32_t idx = startIdx;
+  for (int i = 0; i < size; ++i) {
+    float dot_val= dot(octant->normal, points[idx].normal);
+
+    if( (1- std::fabs(dot_val))  > params_.maxNormalDeviation){
+      haveToSplit=true;
+      break;
+    }
+
+    idx = successors_[idx];
+  }
+
+
   // subdivide subset of points and re-link points according to Morton codes
-  if (size > params_.bucketSize && extent > 2 * params_.minExtent)
+  if (haveToSplit && extent > 2 * params_.minExtent)
   {
     octant->isLeaf = false;
 
